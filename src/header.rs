@@ -58,6 +58,7 @@ pub struct CocoonConfig {
     kdf_variant: CocoonKdfVariant,
     /// Reserved byte is for the explicit structure aligning
     /// as well as for possible format upgrade in future.
+    #[allow(dead_code)]
     reserved: u8,
 }
 
