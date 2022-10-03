@@ -4,7 +4,7 @@ use aes_gcm::{
 };
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
-use chacha20poly1305::ChaCha20Poly1305;
+use chacha20poly1305::{aead::AeadMutInPlace, ChaCha20Poly1305, KeyInit};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 #[cfg(feature = "std")]
 use std::io::{Read, Write};
@@ -275,15 +275,18 @@ impl MiniCocoon {
 
         let tag: [u8; 16] = match self.config.cipher() {
             CocoonCipher::Chacha20Poly1305 => {
-                let cipher = ChaCha20Poly1305::new(&key);
-                cipher.encrypt_in_place_detached(nonce, &prefix.prefix(), data)
+                let mut cipher = ChaCha20Poly1305::new(&key);
+                cipher
+                    .encrypt_in_place_detached(nonce, prefix.prefix(), data)
+                    .map_err(|_| Error::Cryptography)?
             }
             CocoonCipher::Aes256Gcm => {
                 let cipher = Aes256Gcm::new(&key);
-                cipher.encrypt_in_place_detached(nonce, &prefix.prefix(), data)
+                cipher
+                    .encrypt_in_place_detached(nonce, prefix.prefix(), data)
+                    .map_err(|_| Error::Cryptography)?
             }
         }
-        .map_err(|_| Error::Cryptography)?
         .into();
 
         Ok(prefix.serialize(&tag))
@@ -364,8 +367,7 @@ impl MiniCocoon {
     #[cfg_attr(docs_rs, doc(cfg(feature = "std")))]
     pub fn parse(&self, reader: &mut impl Read) -> Result<Vec<u8>, Error> {
         let prefix = MiniFormatPrefix::deserialize_from(reader)?;
-        let mut body = Vec::with_capacity(prefix.header().data_length());
-        body.resize(body.capacity(), 0);
+        let mut body = vec![0; prefix.header().data_length()];
 
         // Too short error can be thrown right from here.
         reader.read_exact(&mut body)?;
@@ -425,15 +427,18 @@ impl MiniCocoon {
 
         match self.config.cipher() {
             CocoonCipher::Chacha20Poly1305 => {
-                let cipher = ChaCha20Poly1305::new(&master_key);
-                cipher.decrypt_in_place_detached(nonce, &detached_prefix.prefix(), data, tag)
+                let mut cipher = ChaCha20Poly1305::new(&master_key);
+                cipher
+                    .decrypt_in_place_detached(nonce, &detached_prefix.prefix(), data, tag)
+                    .map_err(|_| Error::Cryptography)?
             }
             CocoonCipher::Aes256Gcm => {
                 let cipher = Aes256Gcm::new(&master_key);
-                cipher.decrypt_in_place_detached(nonce, &detached_prefix.prefix(), data, tag)
+                cipher
+                    .decrypt_in_place_detached(nonce, &detached_prefix.prefix(), data, tag)
+                    .map_err(|_| Error::Cryptography)?
             }
         }
-        .map_err(|_| Error::Cryptography)?;
 
         Ok(())
     }

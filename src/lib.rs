@@ -263,10 +263,10 @@ mod mini;
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-use aes_gcm::{AeadInPlace, Aes256Gcm};
+use aes_gcm::{AeadInPlace, Aes256Gcm, NewAead};
 use chacha20poly1305::{
-    aead::{generic_array::GenericArray, NewAead},
-    ChaCha20Poly1305,
+    aead::{generic_array::GenericArray, AeadMutInPlace},
+    ChaCha20Poly1305, KeyInit,
 };
 #[cfg(feature = "std")]
 use rand::rngs::ThreadRng;
@@ -747,15 +747,18 @@ impl<'a> Cocoon<'a, Creation> {
 
         let tag: [u8; 16] = match self.config.cipher() {
             CocoonCipher::Chacha20Poly1305 => {
-                let cipher = ChaCha20Poly1305::new(&master_key);
-                cipher.encrypt_in_place_detached(nonce, &prefix.prefix(), data)
+                let mut cipher = ChaCha20Poly1305::new(&master_key);
+                cipher
+                    .encrypt_in_place_detached(nonce, &prefix.prefix(), data)
+                    .map_err(|_| Error::Cryptography)?
             }
             CocoonCipher::Aes256Gcm => {
                 let cipher = Aes256Gcm::new(&master_key);
-                cipher.encrypt_in_place_detached(nonce, &prefix.prefix(), data)
+                cipher
+                    .encrypt_in_place_detached(nonce, &prefix.prefix(), data)
+                    .map_err(|_| Error::Cryptography)?
             }
         }
-        .map_err(|_| Error::Cryptography)?
         .into();
 
         Ok(prefix.serialize(&tag))
@@ -901,15 +904,18 @@ impl<'a, M> Cocoon<'a, M> {
 
         match header.config().cipher() {
             CocoonCipher::Chacha20Poly1305 => {
-                let cipher = ChaCha20Poly1305::new(&master_key);
-                cipher.decrypt_in_place_detached(nonce, &detached_prefix.prefix(), data, tag)
+                let mut cipher = ChaCha20Poly1305::new(&master_key);
+                cipher
+                    .decrypt_in_place_detached(nonce, &detached_prefix.prefix(), data, tag)
+                    .map_err(|_| Error::Cryptography)?
             }
             CocoonCipher::Aes256Gcm => {
                 let cipher = Aes256Gcm::new(&master_key);
-                cipher.decrypt_in_place_detached(nonce, &detached_prefix.prefix(), data, tag)
+                cipher
+                    .decrypt_in_place_detached(nonce, &detached_prefix.prefix(), data, tag)
+                    .map_err(|_| Error::Cryptography)?
             }
         }
-        .map_err(|_| Error::Cryptography)?;
 
         Ok(())
     }
